@@ -11,16 +11,13 @@ namespace JwtAuthenticationAutherization.Controllers;
 public class UserController : Controller
 {
 
-    private readonly MyDbContext dbContext;
-    private readonly IConfiguration configuration;
+    private readonly MyDbContext _dbContext;
+    private readonly IConfiguration _configuration;
 
-    public UserController(
-        MyDbContext dbContext,
-        IConfiguration configuration
-    )
+    public UserController(MyDbContext dbContext, IConfiguration configuration)
     {
-        this.dbContext = dbContext;
-        this.configuration = configuration;
+        _dbContext = dbContext;
+        _configuration = configuration;
     }
 
     [HttpPost]
@@ -32,30 +29,32 @@ public class UserController : Controller
             return BadRequest(ModelState);
         }
 
-        var objUser = dbContext.User.FirstOrDefault(u => u.Email.Equals(userDTO.Email));
+        var objUser = _dbContext.User
+            .FirstOrDefault(u => u.Email.Equals(userDTO.Email));
 
-        if (objUser == null)
-        {
-            dbContext.User.Add(new User
-            {
-                Name = userDTO.Name,
-                Email = userDTO.Email,
-                Password = userDTO.Password,
-            });
-            dbContext.SaveChanges();
-            return Ok("User registration success");
-        }
-        else
+        if (objUser is not null)
         {
             return BadRequest("User already exists with same email address");
         }
+
+        _dbContext.User.Add(new User
+        {
+            Name = userDTO.Name,
+            Email = userDTO.Email,
+            Password = userDTO.Password,
+        });
+        _dbContext.SaveChanges();
+        return Ok("User registration success");
+
     }
 
     [HttpPost]
     [Route("Login")]
     public IActionResult Login(LoginDto loginDto)
     {
-        var user = dbContext.User.FirstOrDefault(x => x.Email.Equals(loginDto.Email) && x.Password.Equals(loginDto.Password));
+        var user = _dbContext.User
+            .FirstOrDefault(x => x.Email.Equals(loginDto.Email)
+            && x.Password.Equals(loginDto.Password));
 
         if (user is null)
         {
@@ -63,18 +62,18 @@ public class UserController : Controller
         }
         var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, configuration["Jwt:Subject"]),
+                new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim("UserId", user.UserId.ToString()),
                 new Claim(ClaimTypes.Email, user.Email.ToString()),
                 new Claim(ClaimTypes.Role, "Admin")
             };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"]));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
         var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            configuration["Jwt:Issuer"],
-            configuration["Jwt:Audience"],
+            _configuration["Jwt:Issuer"],
+            _configuration["Jwt:Audience"],
             claims,
             expires: DateTime.UtcNow.AddMinutes(60),
             signingCredentials: signIn
@@ -93,7 +92,7 @@ public class UserController : Controller
     [Route("GetUsers")]
     public IActionResult GetUsers()
     {
-        return Ok(dbContext.User.ToList());
+        return Ok(_dbContext.User.ToList());
     }
 
     [Authorize(Roles = "Admin")]
@@ -101,10 +100,15 @@ public class UserController : Controller
     [Route("GetUser")]
     public IActionResult GetUser(int id)
     {
-        var user = dbContext.User.FirstOrDefault(x => x.UserId == id);
-        if (user != null)
-            return Ok(user);
-        else
+        var user = _dbContext.User.
+            FirstOrDefault(x => x.UserId == id);
+
+        if (user is null)
+        {
             return NoContent();
+        }
+
+        return Ok(user);
+
     }
 }
